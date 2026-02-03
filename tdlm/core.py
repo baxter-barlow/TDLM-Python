@@ -294,7 +294,7 @@ def sequenceness_crosscorr(probas, tf, tb=None, n_shuf=1000, min_lag=0, max_lag=
 
 # @profile
 def compute_1step(probas, tf, tb=None, n_shuf=100, min_lag=0, max_lag=50,
-                  alpha_freq=None, max_true_trans=None, seed=None):
+                  alpha_freq=None, max_true_trans=None, rng=None):
     """
     Calculate 1-step-sequenceness for probability estimates and transitions.
 
@@ -325,6 +325,8 @@ def compute_1step(probas, tf, tb=None, n_shuf=100, min_lag=0, max_lag=50,
         permutation B->C->A would contain one overlapping transition B->C.
         Setting max_true_trans=0 would remove this permutation from the test.
         The default is None, i.e. no limit.
+    rng : int or numpy.random.Generator, optional
+        Seed or Generator for reproducibility.
     n_steps : int, optional
         number of transition steps to look for. Not implemented yet.
         The default is 1.
@@ -348,13 +350,12 @@ def compute_1step(probas, tf, tb=None, n_shuf=100, min_lag=0, max_lag=50,
     assert tf.shape[0]==tf.shape[1], f'transition matrix must be square {tf.shape=}'
     assert len(tf)==probas.shape[1], f'{len(tf)=} must be same as {probas.shape[1]}'
 
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(rng)
 
     n_states = probas.shape[-1]
     # unique permutations
     unique_perms = unique_permutations(np.arange(n_states), n_shuf,
-                                       max_true_trans=max_true_trans)
+                                       max_true_trans=max_true_trans, rng=rng)
 
     n_perms = len(unique_perms)  # this might be different to requested n_shuf!
 
@@ -393,7 +394,7 @@ def compute_1step(probas, tf, tb=None, n_shuf=100, min_lag=0, max_lag=50,
 
 
 def compute_2step(probas, tf, tb=None, n_steps=2, n_shuf=None, min_lag=0, max_lag=50,
-                  alpha_freq=None, seed=None):
+                  alpha_freq=None, rng=None):
     """
     # 2step tdlm version. for now this is a copy of the MATLAB code, did not
     have time yet to implement the generalized version.
@@ -404,15 +405,19 @@ def compute_2step(probas, tf, tb=None, n_steps=2, n_shuf=None, min_lag=0, max_la
     sequenceness evidence simply because (C*B) is regressed on A for the back-
     wards case and will induce spurious sequenceness of A->B->C when there is
     no triplet replay
+
+    Parameters
+    ----------
+    rng : int or numpy.random.Generator, optional
+        Seed or Generator for reproducibility.
     """
-    if seed is not None:
-        np.random.seed(seed)
+    rng = np.random.default_rng(rng)
     assert n_steps==2, " >2 steps is not implemented yet"
 
     # seq = tf2seq(tf)
     n_states = probas.shape[-1]
 
-    unique_perms = unique_permutations(np.arange(n_states), n_shuf)
+    unique_perms = unique_permutations(np.arange(n_states), n_shuf, rng=rng)
 
     n_perms = len(unique_perms)  # this might be different to requested n_shuf!
 

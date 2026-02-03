@@ -52,11 +52,13 @@ def _trans_overlap(seq1=None, seq2=None, trans1=None, trans2=None):
     return len(trans1.intersection(trans2))
 
 
-def unique_permutations(X, k=None, max_true_trans=None):
+def unique_permutations(X, k=None, max_true_trans=None, rng=None):
     """"""
     X = np.array(X).squeeze()
     assert X.ndim==1
     assert len(X) > 1
+
+    rng = np.random.default_rng(rng)
 
     uniques, uind, c = np.unique(X, return_index=True, return_counts=True)
 
@@ -95,7 +97,7 @@ def unique_permutations(X, k=None, max_true_trans=None):
 
         # add permutations to the set until we reach k
         while len(uperms) < k:
-            perm = tuple(np.random.permutation(seq))
+            perm = tuple(rng.permutation(seq))
 
             # only add if it contains non-true transitions
             if max_true_trans is not None:
