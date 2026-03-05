@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import mat73
 import matplotlib
 import numpy as np
 import pytest
@@ -12,26 +11,19 @@ matplotlib.use("Agg")
 
 
 ROOT = Path(__file__).resolve().parent
-PREDS_FIXTURE = ROOT / "data" / "preds.mat"
-REPLAY_FIXTURE = ROOT / "matlab_code" / "simulate_replay_results.mat"
+FIXTURE_FILE = ROOT / "fixtures" / "python_golden" / "integration_preds.npz"
 
 
-def _load_preds_fixture() -> np.ndarray:
-    payload = mat73.loadmat(PREDS_FIXTURE)
-    return np.asarray(payload["preds"], dtype=float)
-
-
-def _load_replay_fixture() -> tuple[np.ndarray, np.ndarray]:
-    payload = mat73.loadmat(REPLAY_FIXTURE)
-    probas = np.asarray(payload["preds"], dtype=float)
-    tf = np.asarray(payload["TF"], dtype=float)
+def _load_integration_fixture() -> tuple[np.ndarray, np.ndarray]:
+    with np.load(FIXTURE_FILE, allow_pickle=False) as payload:
+        probas = np.asarray(payload["probas"], dtype=float)
+        tf = np.asarray(payload["tf"], dtype=float)
     return probas, tf
 
 
 def test_realdata_smoke_compute_plot_reproducible() -> None:
-    probas = _load_preds_fixture()
+    probas, tf = _load_integration_fixture()
     probas = probas[:1200, :]
-    tf = np.roll(np.eye(probas.shape[1]), 1, axis=1)
 
     sf1, sb1 = tdlm.compute_1step(probas, tf, n_shuf=20, max_lag=15, rng=101)
     sf2, sb2 = tdlm.compute_1step(probas, tf, n_shuf=20, max_lag=15, rng=101)
@@ -49,7 +41,7 @@ def test_realdata_smoke_compute_plot_reproducible() -> None:
 
 @pytest.mark.integration_slow
 def test_realdata_full_pipeline_contracts() -> None:
-    probas, tf = _load_replay_fixture()
+    probas, tf = _load_integration_fixture()
     probas = probas[:3000, :]
 
     # 1-step and 2-step

@@ -1,7 +1,6 @@
 absl_py
 jax
 joblib
-mat73
 matplotlib
 mypy
 mne
