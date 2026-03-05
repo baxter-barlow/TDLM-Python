@@ -104,7 +104,7 @@ def simulate_classifier_patterns(
     rng: int | np.random.Generator | None = None,
 ) -> tuple[NDArray[np.float64], NDArray[np.int_], NDArray[np.float64]]:
     """
-    Generates synthetic training data and labels matching MATLAB TDLM logic.
+    Generates synthetic training data and labels for TDLM experiments.
 
     Parameters
     ----------
@@ -176,7 +176,6 @@ def simulate_classifier_patterns(
                                      replace=False)
 
         for idx in more_noise_inds:
-            # MATLAB 1-based logic conversion: (Ind-1)*N + 1 : Ind*N
             start_rel = (idx - 1) * n_train_per_stim
             end_rel = idx * n_train_per_stim
 
@@ -565,4 +564,3 @@ def create_travelling_wave(
         wave[:, i] = np.sin(2 * np.pi * hz * (t - time_delays[i]))
 
     return wave
-

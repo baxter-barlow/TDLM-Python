@@ -33,7 +33,7 @@ jobs:
       run: mypy tdlm
 
     - name: Run Python tests (PR-safe)
-      run: pytest -q -m "not statistical_slow and not matlab_engine_optional and not integration_slow"
+      run: pytest -q -m "not statistical_slow and not integration_slow"
 
     - name: Performance report (non-gating)
       env:

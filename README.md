@@ -3,7 +3,7 @@
 [![Codespell](https://github.com/skjerns/TDLM-Python/actions/workflows/codespell.yml/badge.svg)](https://github.com/skjerns/TDLM-Python/actions/workflows/codespell.yml) 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.12623445.svg)](https://doi.org/10.5281/zenodo.12623444)
 
-This repository provides a Python implementation of [TDLM](https://elifesciences.org/articles/66917). Implementation matches the [MATLAB reference](https://github.com/YunzheLiu/TDLM) implementation up to [decimal precision](https://github.com/skjerns/TDLM-Python/blob/master/tdlm/tests/test_matlab_compatibility.py).
+This repository provides a Python implementation of [TDLM](https://elifesciences.org/articles/66917). Validation and regression checks are fully Python-native.
 
    \- Work-in-Progress -
 
@@ -99,11 +99,11 @@ train_x, train_y, patterns = tdlm.simulate_eeg_localizer(
 )
 ```
 
-## Quality Validation
+## Python-only validation
 
-The repository now includes three quality gates:
+The repository includes three Python-only quality gates:
 
-1. MATLAB fixture parity tests (always in standard test runs)
+1. Deterministic golden baseline tests (always in standard test runs)
 2. Statistical validity tests (`statistical_slow`, nightly-gated)
 3. Performance regression harness (`report` on PRs, `enforce` nightly)
 
@@ -111,13 +111,11 @@ Pytest markers:
 
 * `statistical_slow`
 * `integration_slow`
-* `matlab_engine_optional`
 * `perf`
 
 Environment toggles:
 
 * `TDLM_RUN_STATISTICAL_SLOW=1`
-* `TDLM_ENABLE_MATLAB_ENGINE_TESTS=1`
 * `TDLM_PERF_THRESHOLD` (defaults to `0.20`)
 
 Performance harness commands:
@@ -131,7 +129,7 @@ python tdlm/tests/benchmarks/run_perf_regression.py --mode enforce --baseline td
 ## Migration notes
 
 - Runtime input validation now raises explicit `ValueError`/`TypeError` instead of relying on `assert`.
-- `tdlm.signflit_test` remains available as a compatibility alias but now emits `DeprecationWarning`; use `tdlm.signflip_test`.
+- `tdlm.signflip_test` is the only supported sign-flip API.
 - `compute_windowed` and `compute_1step_per_trial` return fixed numeric arrays and no longer fall back to ambiguous object arrays.
 - Cross-correlation entrypoints now accept `rng` for deterministic shuffles:
   - `tdlm.sequenceness_crosscorr(..., rng=42)`
