@@ -8,7 +8,6 @@ core functions for Temporally Delayed Linear Modelling
 """
 from __future__ import annotations
 
-import warnings
 from collections.abc import Callable, Sequence
 from typing import Any, NamedTuple, cast
 
@@ -25,7 +24,7 @@ from tdlm.utils import unique_permutations
 # except ModuleNotFoundError:
 #     logging.warning('jaxlib not installed, can speed up computation')
 
-# some helper functions to make matlab work like python
+# helper functions for compact array construction
 def ones(*shape: int) -> NDArray[np.float64]:
     return np.ones(shape, dtype=float)
 
@@ -39,7 +38,7 @@ def nan(*shape: int) -> NDArray[np.float64]:
 
 
 def squash(arr: ArrayLike) -> NDArray[np.float64]:
-    return np.asarray(np.ravel(arr, "F"), dtype=float)  # MATLAB uses Fortran style reshaping
+    return np.asarray(np.ravel(arr, "F"), dtype=float)  # Preserve Fortran-order flattening.
 
 class TDLMResult(NamedTuple):
     forward_sequenceness: NDArray[np.float64]
@@ -386,20 +385,6 @@ def signflip_test(
 
     return SignflipResult(float(pvalue), float(t_obs), t_perms)
 
-
-def signflit_test(
-    sx: ArrayLike,
-    n_perms: int = 10000,
-    rng: int | np.random.Generator | None = None,
-) -> SignflipResult:
-    """Backward-compatible alias for signflip_test."""
-    warnings.warn(
-        "tdlm.signflit_test is deprecated and will be removed in 0.7.0; "
-        "use tdlm.signflip_test instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return signflip_test(sx, n_perms=n_perms, rng=rng)
 
 def sequenceness_crosscorr(
     probas: ArrayLike,
@@ -852,8 +837,7 @@ def compute_2step(
     rng: int | np.random.Generator | None = None,
 ) -> TDLMResult:
     """
-    # 2step tdlm version. for now this is a copy of the MATLAB code, did not
-    have time yet to implement the generalized version.
+    2-step TDLM implementation.
 
     I do think there are conceptual problems with this implementation,
     therefore, I do not recommend using the method without further consideration
