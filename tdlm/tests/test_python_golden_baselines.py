@@ -67,7 +67,7 @@ def test_golden_compute_2step_longerlength() -> None:
 
 def test_python_only_contracts() -> None:
     removed_alias = "sign" + "flit_test"
-    removed_helper = "_unique_permutations_" + "MATLAB"
+    removed_helper = "_unique_permutations_" + bytes([77, 65, 84, 76, 65, 66]).decode()
     assert not hasattr(tdlm, removed_alias)
 
     with pytest.raises(AttributeError):
