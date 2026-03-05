@@ -1,0 +1,47 @@
+name: Calibrate performance baseline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  calibrate-baseline:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+        pip install -e .
+
+    - name: Calibrate baseline
+      env:
+        TDLM_PERF_EXPECTED_OS: Linux
+        TDLM_PERF_EXPECTED_PYTHON: '3.10'
+      run: |
+        python tdlm/tests/benchmarks/run_perf_regression.py \
+          --mode calibrate \
+          --baseline tdlm/tests/benchmarks/baseline_ubuntu_py310_candidate.json
+
+    - name: Upload candidate baseline artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: perf-baseline-candidate-${{ matrix.python-version }}
+        path: tdlm/tests/benchmarks/baseline_ubuntu_py310_candidate.json
+        if-no-files-found: error
+
+    - name: Baseline update instructions
+      run: |
+        echo "Candidate baseline generated and uploaded as artifact." >> $GITHUB_STEP_SUMMARY
+        echo "Download the artifact and open a PR replacing tdlm/tests/benchmarks/baseline_ubuntu_py310.json." >> $GITHUB_STEP_SUMMARY
