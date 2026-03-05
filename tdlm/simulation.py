@@ -5,12 +5,23 @@ Created on Mon Dec 22 21:35:04 2025
 
 @author: simon
 """
+from __future__ import annotations
+
+from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
+from numpy.typing import ArrayLike, NDArray
 from scipy.signal import lfilter
 
-def simulate_meeg(length, sfreq, n_channels=64, cov=None, autocorr=0.95, rng=None):
+def simulate_meeg(
+    length: float,
+    sfreq: float,
+    n_channels: int = 64,
+    cov: ArrayLike | None = None,
+    autocorr: float = 0.95,
+    rng: int | np.random.Generator | None = None,
+) -> NDArray[np.float64]:
     """
     Simulate M/EEG resting-state data.
 
@@ -35,7 +46,8 @@ def simulate_meeg(length, sfreq, n_channels=64, cov=None, autocorr=0.95, rng=Non
     eeg_data : numpy.ndarray
         Simulated EEG data of shape (n_samples, n_channels).
     """
-    assert 0 <= autocorr < 1
+    if not (0 <= autocorr < 1):
+        raise ValueError(f"autocorr must satisfy 0 <= autocorr < 1, got {autocorr}")
     n_samples = int(length * sfreq)
     rng = np.random.default_rng(rng)
 
@@ -43,17 +55,22 @@ def simulate_meeg(length, sfreq, n_channels=64, cov=None, autocorr=0.95, rng=Non
     if cov is None:
         A = rng.normal(size=(n_channels, n_channels))
         # Create symmetric positive-definite matrix
-        cov = (A + A.T) / 2
-        _, U = np.linalg.eig(cov)
+        cov_mat = (A + A.T) / 2
+        _, U = np.linalg.eig(cov_mat)
         # Reconstruct with positive eigenvalues
-        cov = U @ np.diag(np.abs(rng.normal(size=n_channels))) @ U.T
+        cov_mat = U @ np.diag(np.abs(rng.normal(size=n_channels))) @ U.T
     else:
-        n_channels = len(cov)
+        cov_mat = np.asarray(cov, dtype=float)
+        if cov_mat.ndim != 2:
+            raise ValueError(f"cov must be 2D, got shape={cov_mat.shape}")
+        if cov_mat.shape[0] != cov_mat.shape[1]:
+            raise ValueError(f"cov must be square, got shape={cov_mat.shape}")
+        n_channels = int(cov_mat.shape[0])
 
     # Compute Mixing Matrix (L) from Covariance
     # We use Cholesky: Cov = L @ L.T
     # If Cov is not strictly positive definite
-    L = np.linalg.cholesky(cov)
+    L = np.linalg.cholesky(cov_mat)
 
     # 2. Generate White Noise (Standard Normal)
     Z = rng.standard_normal((n_samples, n_channels))
@@ -76,10 +93,16 @@ def simulate_meeg(length, sfreq, n_channels=64, cov=None, autocorr=0.95, rng=Non
     # single highly optimized BLAS call
     X = Z @ L.T
 
-    return X
+    return np.asarray(X, dtype=float)
 
-def simulate_classifier_patterns(n_patterns=10, n_channels=306, noise=4,
-                                 scale=1,  n_train_per_stim=18, rng=None):
+def simulate_classifier_patterns(
+    n_patterns: int = 10,
+    n_channels: int = 306,
+    noise: float = 4,
+    scale: float = 1,
+    n_train_per_stim: int = 18,
+    rng: int | np.random.Generator | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.int_], NDArray[np.float64]]:
     """
     Generates synthetic training data and labels matching MATLAB TDLM logic.
 
@@ -167,10 +190,70 @@ def simulate_classifier_patterns(n_patterns=10, n_channels=306, noise=4,
     return training_data*scale, training_labels, patterns*scale
 
 
+def simulate_eeg_resting_state(
+    length: float,
+    sfreq: float,
+    n_channels: int = 64,
+    cov: ArrayLike | None = None,
+    autocorr: float = 0.95,
+    rng: int | np.random.Generator | None = None,
+) -> NDArray[np.float64]:
+    """
+    Convenience wrapper for EEG resting-state simulations.
 
-def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
-                  n_steps=1, refractory=16, distribution='constant',
-                  transitions=None, sequence=None, return_onsets=False, rng=None):
+    This is a named alias of ``simulate_meeg`` for discoverability in EEG-focused
+    workflows.
+    """
+    return simulate_meeg(
+        length=length,
+        sfreq=sfreq,
+        n_channels=n_channels,
+        cov=cov,
+        autocorr=autocorr,
+        rng=rng,
+    )
+
+
+def simulate_eeg_localizer(
+    n_patterns: int = 10,
+    n_channels: int = 306,
+    noise: float = 4,
+    scale: float = 1,
+    n_train_per_stim: int = 18,
+    rng: int | np.random.Generator | None = None,
+) -> tuple[NDArray[np.float64], NDArray[np.int_], NDArray[np.float64]]:
+    """
+    Convenience wrapper to simulate EEG localizer-style training data.
+
+    This is a named alias of ``simulate_classifier_patterns`` that returns:
+    (training_data, training_labels, patterns).
+    """
+    return simulate_classifier_patterns(
+        n_patterns=n_patterns,
+        n_channels=n_channels,
+        noise=noise,
+        scale=scale,
+        n_train_per_stim=n_train_per_stim,
+        rng=rng,
+    )
+
+
+
+def insert_events(
+    data: ArrayLike,
+    insert_data: ArrayLike,
+    insert_labels: ArrayLike,
+    n_events: int,
+    lag: int = 8,
+    jitter: int = 0,
+    n_steps: int = 1,
+    refractory: int | list[int] | None = 16,
+    distribution: str | ArrayLike = 'constant',
+    transitions: ArrayLike | None = None,
+    sequence: Sequence[int] | None = None,
+    return_onsets: bool = False,
+    rng: int | np.random.Generator | None = None,
+) -> NDArray[np.float64] | tuple[NDArray[np.float64], pd.DataFrame]:
     """
     inject decodable events into M/EEG data according to a certain pattern.
 
@@ -223,24 +306,42 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
     (optional) return_onsets: pd.DataFrame
         table with onsets of events
     """
-    if isinstance(insert_labels, list):
-        insert_labels = np.array(insert_labels)
-    if isinstance(insert_data, list):
-        insert_data = np.array(insert_data)
+    data = np.asarray(data, dtype=float)
+    insert_data = np.asarray(insert_data, dtype=float)
+    insert_labels = np.asarray(insert_labels)
     import logging
-    assert len(insert_data) == len(insert_labels), 'each data point must have a label'
-    assert insert_data.ndim in [2, 3]
-    assert insert_labels.ndim == 1
-    assert data.ndim==2
-    assert data.shape[1] == insert_data.shape[1]
-    assert min(insert_labels)==0, 'insert_labels must start at 0 and be consecutive'
+    if len(insert_data) != len(insert_labels):
+        raise ValueError(
+            f"each insert_data row must have a corresponding insert_labels entry; "
+            f"got len(insert_data)={len(insert_data)}, len(insert_labels)={len(insert_labels)}"
+        )
+    if insert_data.ndim not in (2, 3):
+        raise ValueError(f"insert_data must be 2D or 3D, got shape={insert_data.shape}")
+    if insert_labels.ndim != 1:
+        raise ValueError(f"insert_labels must be 1D, got shape={insert_labels.shape}")
+    if data.ndim != 2:
+        raise ValueError(f"data must be 2D (time, channels), got shape={data.shape}")
+    if data.shape[1] != insert_data.shape[1]:
+        raise ValueError(
+            f"channel dimension mismatch: data has {data.shape[1]}, insert_data has {insert_data.shape[1]}"
+        )
+    if np.min(insert_labels) != 0:
+        raise ValueError(
+            f"insert_labels must start at 0 and be consecutive, got min(insert_labels)={np.min(insert_labels)}"
+        )
 
     if isinstance(distribution, np.ndarray):
-        assert len(distribution) == len(data)
-        assert distribution.ndim == 1
-        assert np.isclose(distribution.sum(), 1), 'Distribution must sum to 1, but {distribution.sum()=}'
+        if len(distribution) != len(data):
+            raise ValueError(
+                f"distribution length must match data length, got len(distribution)={len(distribution)}, len(data)={len(data)}"
+            )
+        if distribution.ndim != 1:
+            raise ValueError(f"distribution must be 1D, got shape={distribution.shape}")
+        if not np.isclose(distribution.sum(), 1):
+            raise ValueError(f"distribution must sum to 1, got sum={distribution.sum()}")
 
-    assert sequence is None or transitions is None, 'either sequence or transitions must be supplied'
+    if (sequence is None) == (transitions is None):
+        raise ValueError('provide exactly one of sequence or transitions')
 
     # no events requested? simply return
     if not n_events:
@@ -251,13 +352,21 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
         refractory = [refractory, refractory]
 
     if sequence is not None:
-        transitions = [sequence[i:i+n_steps+1]for i, _ in enumerate(sequence[:-n_steps])]
-        assert len(transitions) == len(sequence)-n_steps, 'sanity check failed'
+        if len(sequence) < (n_steps + 1):
+            raise ValueError(f'sequence must contain at least {n_steps + 1} states')
+        transitions = [sequence[i:i + n_steps + 1]
+                       for i in range(len(sequence) - n_steps)]
+    else:
+        transitions = np.array(transitions)
+        if transitions.ndim == 1:
+            if len(transitions) < (n_steps + 1):
+                raise ValueError(f'1D transitions must contain at least {n_steps + 1} states')
+            transitions = [transitions[i:i + n_steps + 1]
+                           for i in range(len(transitions) - n_steps)]
 
-    transitions = np.squeeze(transitions)
-
-    assert transitions.shape[1]==n_steps+1, \
-        f'each transition must have exactly {n_steps}+1 steps'
+    transitions = np.asarray(transitions)
+    if transitions.ndim != 2 or transitions.shape[1] != (n_steps + 1):
+        raise ValueError(f'each transition must have exactly {n_steps + 1} steps')
 
     del sequence # for safety, can be removed later
 
@@ -266,7 +375,7 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
         insert_data = insert_data.reshape([*insert_data.shape, 1])
 
     # work on copy of array to prevent mutable changes
-    data_sim = data.copy()
+    data_sim: NDArray[np.float64] = data.copy()
 
     # get reproducible seed
     rng = np.random.default_rng(rng)
@@ -286,8 +395,12 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
             raise ValueError(f'unknown {distribution=}')
     elif isinstance(distribution, (list, np.ndarray)):
         distribution = np.array(distribution)
-        assert len(distribution)==len(data), f'{distribution.shape=} != {len(data)=}'
-        assert np.isclose(distribution.sum(), 1), f'{distribution.sum()=} must be sum=1'
+        if len(distribution) != len(data):
+            raise ValueError(
+                f"distribution length must match data length, got distribution shape={distribution.shape}, len(data)={len(data)}"
+            )
+        if not np.isclose(distribution.sum(), 1):
+            raise ValueError(f"distribution must sum to 1, got sum={distribution.sum()}")
         p = distribution
     else:
         raise ValueError(f'distribution must be string or p-vector, {distribution=}')
@@ -297,6 +410,8 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
     event_length = n_steps*lag + tspan -1  # time span of one replay events
     p[-event_length:] = 0  # dont start events at end of resting state
     p[:tspan] = 0  # block beginning of resting state
+    if p.sum() <= 0:
+        raise ValueError('no valid start positions are available with current settings')
     p = p/p.sum()  # normalize probability vector again after removing indices
 
     replay_start_idxs = []
@@ -324,6 +439,8 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
             p[block_start: block_end] = 0
 
             # normalize to create valid probability distribution
+            if p.sum() <= 0:
+                raise ValueError(f'no more positions to insert events! {n_events=} too high?')
             p = p/p.sum()
 
         # check that we actually still have enough positions to insert
@@ -335,12 +452,14 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
 
 
     # save data about inserted events here and return if requested
-    events = {'event_idx': [],
-              'pos': [],
-              'step': [],
-              'class_idx': [],
-              'span': [],
-              'jitter': []}
+    events: dict[str, list[int]] = {
+        'event_idx': [],
+        'pos': [],
+        'step': [],
+        'class_idx': [],
+        'span': [],
+        'jitter': [],
+    }
 
     for idx,  start_idx in enumerate(replay_start_idxs):
         smp_jitter = 0  # starting with no jitter
@@ -355,7 +474,8 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
             data_class = insert_data[insert_labels==class_idx]
             idx_cls_i = rng.choice(np.arange(len(data_class)))
             insert_data_i = data_class[idx_cls_i]
-            assert insert_data_i.ndim==2
+            if insert_data_i.ndim != 2:
+                raise ValueError(f"insert_data_i must be 2D after class sampling, got shape={insert_data_i.shape}")
 
             # time spans of the segments we want to insert
             t_start = pos - tspan // 2
@@ -363,26 +483,33 @@ def insert_events(data, insert_data, insert_labels, n_events, lag=8, jitter=0,
             data_sim[t_start:t_end, :] += insert_data_i.T
             logging.debug(f'{start_idx=} {pos=} {class_idx=}')
 
-            events['event_idx'] += [idx]
-            events['pos'] += [pos]
-            events['step'] += [step]
-            events['class_idx'] += [class_idx]
-            events['span'] += [insert_data_i.shape[-1]]
-            events['jitter'] += [smp_jitter]
+            events['event_idx'] += [int(idx)]
+            events['pos'] += [int(pos)]
+            events['step'] += [int(step)]
+            events['class_idx'] += [int(class_idx)]
+            events['span'] += [int(insert_data_i.shape[-1])]
+            events['jitter'] += [int(smp_jitter)]
 
             # increment pos to select position of next reactivation event
-            smp_jitter = rng.integers(-jitter, jitter+1) if jitter else 0
+            smp_jitter = int(rng.integers(-jitter, jitter + 1)) if jitter else 0
             pos += lag + smp_jitter  # add next sequence step
 
     if return_onsets:
         df_onsets = pd.DataFrame(events)
         df_onsets['n_events'] = n_events
-        return (data_sim, df_onsets)
+        return data_sim, df_onsets
 
     return data_sim
 
 
-def create_travelling_wave(hz, seconds, sfreq, chs_pos, source_idx=0, speed=50):
+def create_travelling_wave(
+    hz: float,
+    seconds: float,
+    sfreq: int,
+    chs_pos: ArrayLike,
+    source_idx: int = 0,
+    speed: float = 50,
+) -> NDArray[np.float64]:
     """
     Create a sinus wave of shape (size, len(sensor_pos)), where each
     entry in the second dimension is phase shifted according to propagation
@@ -439,9 +566,3 @@ def create_travelling_wave(hz, seconds, sfreq, chs_pos, source_idx=0, speed=50):
 
     return wave
 
-
-if __name__=='__main__':
-    import seaborn as sns
-    import stimer
-    with stimer:
-        x1 = simulate_meeg(600, 100, 306, rng=0)

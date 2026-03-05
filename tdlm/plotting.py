@@ -4,19 +4,41 @@ Created on Fri Apr 19 14:01:06 2024
 
 @author: simon.kern
 """
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Any
+
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
+from numpy.typing import ArrayLike, NDArray
 from matplotlib.ticker import (MultipleLocator, AutoMinorLocator)
-from tdlm.core import signflit_test
+from matplotlib.axes import Axes
+from tdlm.core import signflip_test
 from cycler import cycler
 
 
-def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
-                      color=None, which=['fwd-bkw', 'fwd', 'bkw'], clear=True,
-                      plotsignflip=False, plotmax=True, plot95=True,
-                      label=None,  min_lag=0, max_lag=None, rescale=True,
-                      despine=True,  **kwargs):
+def plot_sequenceness(
+    seq_fwd: ArrayLike,
+    seq_bkw: ArrayLike,
+    sfreq: int = 100,
+    ax: Axes | None = None,
+    title: str | None = None,
+    color: str | tuple[float, float, float] | None = None,
+    which: Sequence[str] | str = ('fwd-bkw', 'fwd', 'bkw'),
+    clear: bool = True,
+    plotsignflip: bool | int = False,
+    plotmax: bool = True,
+    plot95: bool = True,
+    label: str | None = None,
+    min_lag: int = 0,
+    max_lag: int | None = None,
+    rescale: bool = True,
+    despine: bool = True,
+    **kwargs: object,
+) -> Axes:
     """Plot forward, backward and differential sequenceness with conf. interv.
 
     Given forward and backwards sequenceness permutation result matrices, plot
@@ -87,10 +109,17 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
             raise ValueError(f"{kw} was given in 'which', must be of 'bkw', 'fwd', 'fwd-bkw'")
 
 
-    def shadedErrorBar(x, y, err, ax=None, **kwargs):
-        ax.plot(x, y, **kwargs)
-        kwargs.update(dict(label='_nolegend_' ))
-        ax.fill_between(x, y-err, y+err, alpha=0.35, **kwargs)
+    def shadedErrorBar(
+        x: NDArray[np.int_],
+        y: NDArray[np.float64],
+        err: NDArray[np.float64],
+        ax: Axes,
+        **kwargs: object,
+    ) -> None:
+        plot_kwargs: dict[str, Any] = dict(kwargs)
+        ax.plot(x, y, **plot_kwargs)
+        plot_kwargs.update(dict(label='_nolegend_'))
+        ax.fill_between(x, y - err, y + err, alpha=0.35, **plot_kwargs)
 
     sf = np.array(seq_fwd, copy=True)
     sb = np.array(seq_bkw, copy=True)
@@ -100,7 +129,8 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
     if sb.ndim==2:
         sb = sb.reshape([1, *sb.shape])
 
-    assert sf.shape==sb.shape, f'{sf.shape=} must be {sb.shape=} but is not'
+    if sf.shape != sb.shape:
+        raise ValueError(f"seq_fwd and seq_bkw must have matching shapes, got {sf.shape=} and {sb.shape=}")
 
     sf = np.nan_to_num(sf)
     sb = np.nan_to_num(sb)
@@ -111,10 +141,8 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
     times = np.linspace(min_lag, max_lag, sf.shape[-1]).astype(int)
 
     if ax is None:
-        fig = plt.figure()
+        _fig = plt.figure()
         ax = plt.gca()
-    else:
-        fig = ax.figure
 
     if despine:
         sns.despine()
@@ -127,6 +155,13 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
     # First plot fwd-bkw
     div = 1
     sxs = [sf-sb, sf, sb]
+    can_plot_signflip = sf.shape[0] > 1
+    n_perms_signflip = 10000
+    if isinstance(plotsignflip, int) and not isinstance(plotsignflip, bool):
+        n_perms_signflip = plotsignflip
+    if plotsignflip and not can_plot_signflip:
+        warnings.warn('plotsignflip requires at least 2 observations; skipping signflip threshold.')
+
     for i, direction in enumerate(['fwd-bkw', 'fwd', 'bkw']):
         if direction not in which:
             continue
@@ -145,11 +180,11 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
             thresh_max = 1 if rescale else thresh_max
             ax.hlines(-thresh_max, times[0], times[-1], linestyles='--', color=c, linewidth=1.5, alpha=0.6, label='_')
             ax.hlines(thresh_max, times[0], times[-1], linestyles='--', color=c, linewidth=1.5, alpha=0.6, label='_')
-        if plotsignflip:
-            p, _, _, thresholds = signflit_test(sx[:, 0, :], n_perms=10000)
-            thresh_signflip = thresholds/div
-            ax.plot(times, -thresh_signflip, linestyle='--', color=c, linewidth=1, alpha=0.6, label='_')
-            ax.plot(times, thresh_signflip, linestyle='--', color=c, linewidth=1, alpha=0.6, label='_')
+        if plotsignflip and can_plot_signflip:
+            sf_result = signflip_test(sx[:, 0, :], n_perms=n_perms_signflip)
+            thresh_signflip = np.quantile(sf_result.t_perms, 0.95) / div
+            ax.hlines(-thresh_signflip, times[0], times[-1], linestyles=':', color=c, linewidth=1, alpha=0.6, label='_')
+            ax.hlines(thresh_signflip, times[0], times[-1], linestyles=':', color=c, linewidth=1, alpha=0.6, label='_')
         if plot95:
             thresh_95 = np.quantile(perm_maxes, 0.95)/div
             ax.hlines(thresh_95, times[0], times[-1], linestyles='-.', color=c, linewidth=1, alpha=0.4, label='_')
@@ -174,13 +209,20 @@ def plot_sequenceness(seq_fwd, seq_bkw, sfreq=100, ax=None, title=None,
     if title is not None:  ax.set_title(title)
     # ax.set_xticks(times[::5], minor=True
     ax.grid(axis='x', linewidth=1, which='both', alpha=0.3)
-    fig.tight_layout()
+    fig_obj: Any = ax.figure
+    fig_obj.tight_layout()
     return ax
 
 
-def plot_tval_distribution(t_obs, t_perms, bins=100, color=None,
-                           thresholds=(0.95, 0.99), title='tvalue distribution',
-                           ax=None):
+def plot_tval_distribution(
+    t_obs: float,
+    t_perms: ArrayLike,
+    bins: int = 100,
+    color: str | tuple[float, float, float] | None = None,
+    thresholds: Sequence[float] | float = (0.95, 0.99),
+    title: str = 'tvalue distribution',
+    ax: Axes | None = None,
+) -> Axes:
     """
     Plot a histogram of a permutation-based t-value distribution and mark the observed statistic
     with significance thresholds.
@@ -205,34 +247,48 @@ def plot_tval_distribution(t_obs, t_perms, bins=100, color=None,
     ax : matplotlib.axes.Axes
         Axes containing the plot.
     """
+    t_perms_arr = np.asarray(t_perms, dtype=float).ravel()
+    if t_perms_arr.ndim != 1 or t_perms_arr.size == 0:
+        raise ValueError(f"t_perms must be a non-empty 1D array, got shape={t_perms_arr.shape}")
+
     if ax is None:
         fig, ax = plt.subplots(1, 1)
 
-    if isinstance(thresholds, (float)):
-        thresholds = [thresholds]
+    if isinstance(thresholds, float):
+        thresholds_arr = np.array([thresholds], dtype=float)
+    else:
+        thresholds_arr = np.asarray(thresholds, dtype=float).ravel()
+    if thresholds_arr.size == 0:
+        raise ValueError("thresholds must contain at least one value")
 
-    ax = sns.histplot(t_perms, bins=bins, ax=ax, stat="percent", color=color)
+    ax = sns.histplot(t_perms_arr, bins=bins, ax=ax, stat="percent", color=color)
 
     # Highlight the bin with red color
-    p = (t_obs<t_perms).mean()
+    p = float((t_obs < t_perms_arr).mean())
     ylims = ax.get_ylim()
     ax.vlines(t_obs, *ylims, label=f"observed\n{p=:.5f}".rstrip('0'),
               color='red')
 
     linestyle = cycler('linestyle', ["--",":", "-."])()
-    for i, thresh in enumerate(thresholds):
-        p_thresh = np.quantile(t_perms, thresh)
+    for thresh in thresholds_arr:
+        p_thresh = np.quantile(t_perms_arr, float(thresh))
         ax.vlines(p_thresh, *ylims, label=f'p={np.round(1-thresh, 8)}',
                   color='black', **next(linestyle))
 
     # Add labels and title
-    ax.set_title(title)
+    if title is not None:
+        ax.set_title(title)
     ax.set_xlabel("tvalue distribution")
     ax.set_ylabel("Percentage")
     ax.legend(fontsize=12, loc="upper right")
     return ax
 
-def plot_permutation_distribution(sx, ax=None, title=None, **kwargs):
+def plot_permutation_distribution(
+    sx: ArrayLike,
+    ax: Axes | None = None,
+    title: str | None = None,
+    **kwargs: object,
+) -> tuple[Axes, float]:
     """plots the means of a TDLM permutation results.
 
     plots a histogram of mean permutation sequenceness values across the
@@ -259,8 +315,12 @@ def plot_permutation_distribution(sx, ax=None, title=None, **kwargs):
     p : np.float
         p value of the permutation distribution test.
     """
+    sx_arr = np.asarray(sx, dtype=float)
+    if sx_arr.ndim < 2:
+        raise ValueError(f"sx must be at least 2D, got shape={sx_arr.shape}")
+
     # Calculate mean across values for each subject
-    mean_subjects = np.nanmean(sx, axis=(2,))
+    mean_subjects = np.nanmean(sx_arr, axis=(2,))
 
     # Calculate mean of means
     mean_of_means = np.nanmean(mean_subjects, axis=0)
@@ -285,7 +345,8 @@ def plot_permutation_distribution(sx, ax=None, title=None, **kwargs):
     # Add labels and title
     ax.set_xlabel("Mean sequenceness of permutation")
     ax.set_ylabel("Count")
-    ax.set_title(title)
+    if title is not None:
+        ax.set_title(title)
     # ax.text(ax.get_xlim()[1]*0.97, ax.get_ylim()[1]*0.95, f'{p=:.3f}', horizontalalignment='right')
     ax.legend([f"observed\n{p=:.3f}"], fontsize=12, loc="upper left")
     return ax, p

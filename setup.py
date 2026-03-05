@@ -8,11 +8,14 @@ setup(name='tdlm-python',
       url='http://github.com/skjerns/TDLM-Python',
       author='skjerns',
       author_email='nomail@nomail.com',
-      license='GPLv4',
+      license='GPL-3.0-or-later',
       packages=['tdlm'],
       install_requires=['numpy', 'numba', 'seaborn', 'tqdm', 'joblib', 'cycler'],
       zip_safe=False,
       classifiers=[
           "Programming Language :: Python :: 3",
+          "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
           "Operating System :: OS Independent",
-      ],)
+      ],
+      package_data={"tdlm": ["py.typed"]},
+      include_package_data=True)

@@ -113,13 +113,40 @@ class TestRNGBehavior(unittest.TestCase):
         self.assertEqual(sf.shape, (10, 11),
                         "Should produce correct shape with Generator")
 
-    def test_signflit_test_with_int_seed(self):
-        """Test that signflit_test produces reproducible results"""
+    def test_sequenceness_crosscorr_with_int_seed(self):
+        """Cross-correlation mode should be reproducible with an integer seed."""
+        sf1, sb1 = tdlm.sequenceness_crosscorr(self.probas, self.tf, n_shuf=10, max_lag=10, rng=42)
+        sf2, sb2 = tdlm.sequenceness_crosscorr(self.probas, self.tf, n_shuf=10, max_lag=10, rng=42)
+        self.assertTrue(np.allclose(sf1, sf2, equal_nan=True))
+        self.assertTrue(np.allclose(sb1, sb2, equal_nan=True))
+
+    def test_cross_correlation_alias_rng_forwarding(self):
+        """cross_correlation alias should honor the rng argument."""
+        sf1, sb1 = tdlm.cross_correlation(self.probas, self.tf, n_shuf=10, max_lag=10, rng=123)
+        sf2, sb2 = tdlm.cross_correlation(self.probas, self.tf, n_shuf=10, max_lag=10, rng=123)
+        self.assertTrue(np.allclose(sf1, sf2, equal_nan=True))
+        self.assertTrue(np.allclose(sb1, sb2, equal_nan=True))
+
+    def test_sequenceness_crosscorr_different_seeds(self):
+        """Different seeds should alter shuffled cross-correlation rows."""
+        sf1, _ = tdlm.sequenceness_crosscorr(self.probas, self.tf, n_shuf=10, max_lag=10, rng=5)
+        sf2, _ = tdlm.sequenceness_crosscorr(self.probas, self.tf, n_shuf=10, max_lag=10, rng=6)
+        self.assertTrue(np.allclose(sf1[0], sf2[0], equal_nan=True))
+        self.assertFalse(np.allclose(sf1[1:], sf2[1:], equal_nan=True))
+
+    def test_sequenceness_crosscorr_zero_shuffles_keeps_unshuffled_row(self):
+        """n_shuf=0 should still return the unshuffled baseline permutation."""
+        sf, sb = tdlm.sequenceness_crosscorr(self.probas, self.tf, n_shuf=0, max_lag=10, rng=7)
+        self.assertEqual(sf.shape, (1, 11))
+        self.assertEqual(sb.shape, (1, 11))
+
+    def test_signflip_test_with_int_seed(self):
+        """Test that signflip_test produces reproducible results"""
         # Create test data with multiple subjects
         sx = np.random.RandomState(42).randn(20, 10) + 0.1  # 20 subjects, 10 lags
 
-        result1 = tdlm.signflit_test(sx, n_perms=100, rng=42)
-        result2 = tdlm.signflit_test(sx, n_perms=100, rng=42)
+        result1 = tdlm.signflip_test(sx, n_perms=100, rng=42)
+        result2 = tdlm.signflip_test(sx, n_perms=100, rng=42)
 
         self.assertEqual(result1.pvalue, result2.pvalue,
                         "Same seed should produce identical p-values")

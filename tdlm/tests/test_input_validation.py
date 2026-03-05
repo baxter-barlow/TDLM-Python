@@ -26,39 +26,39 @@ class TestInputValidation(unittest.TestCase):
     def test_compute_1step_wrong_probas_dimensions(self):
         """Test that compute_1step rejects wrong dimensional probas"""
         # 1D array should fail
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(np.random.rand(100), self.valid_tf)
 
         # 3D array should fail
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(np.random.rand(100, 5, 2), self.valid_tf)
 
     def test_compute_1step_wrong_tf_dimensions(self):
         """Test that compute_1step rejects wrong dimensional transition matrix"""
         # 1D array should fail
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(self.valid_probas, np.array([1, 2, 3]))
 
         # 3D array should fail
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(self.valid_probas, np.random.rand(5, 5, 2))
 
     def test_compute_1step_non_square_tf(self):
         """Test that compute_1step rejects non-square transition matrix"""
         tf_nonsquare = np.random.rand(3, 5)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(self.valid_probas, tf_nonsquare)
 
     def test_compute_1step_mismatched_dimensions(self):
         """Test that compute_1step rejects mismatched probas and tf dimensions"""
         # probas has 5 states, but tf has 4
         tf_small = np.eye(4)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(self.valid_probas, tf_small)
 
         # probas has 5 states, but tf has 6
         tf_large = np.eye(6)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_1step(self.valid_probas, tf_large)
 
     def test_compute_1step_negative_parameters(self):
@@ -87,7 +87,7 @@ class TestInputValidation(unittest.TestCase):
                                        max_lag=1, n_shuf=2)
             # If it succeeds, check shapes are correct
             self.assertEqual(sf.shape[1], 2)  # max_lag + 1
-        except (AssertionError, ValueError, IndexError):
+        except (ValueError, IndexError):
             # It's also acceptable to fail with very limited data
             pass
 
@@ -109,21 +109,30 @@ class TestInputValidation(unittest.TestCase):
         # Should still produce output with correct shape
         self.assertEqual(sf.shape[1], 51)  # max_lag + 1
 
+    def test_compute_1step_alpha_freq_exceeds_max_lag(self):
+        """Test that alpha_freq must not exceed max_lag"""
+        with self.assertRaises(ValueError):
+            tdlm.compute_1step(
+                self.valid_probas,
+                self.valid_tf,
+                max_lag=10,
+                alpha_freq=11,
+                n_shuf=2,
+            )
+
     # ==================== compute_2step tests ====================
 
-    # NOTE: compute_2step currently lacks input validation for probas dimensions.
-    # Passing 1D array causes memory explosion. Skip this test until fixed.
-    # def test_compute_2step_wrong_dimensions(self):
-    #     """Test that compute_2step validates input dimensions"""
-    #     with self.assertRaises(AssertionError):
-    #         tdlm.compute_2step(np.random.rand(100), self.valid_tf)
+    def test_compute_2step_wrong_dimensions(self):
+        """Test that compute_2step validates input dimensions"""
+        with self.assertRaises(ValueError):
+            tdlm.compute_2step(np.random.rand(100), self.valid_tf)
 
     def test_compute_2step_n_steps_validation(self):
         """Test that compute_2step only accepts n_steps=2"""
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_2step(self.valid_probas, self.valid_tf, n_steps=1)
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             tdlm.compute_2step(self.valid_probas, self.valid_tf, n_steps=3)
 
         # n_steps=2 should work
@@ -131,42 +140,42 @@ class TestInputValidation(unittest.TestCase):
                                      n_steps=2, n_shuf=2, max_lag=5)
         self.assertIsNotNone(sf)
 
-    # ==================== signflit_test tests ====================
+    # ==================== signflip_test tests ====================
 
-    def test_signflit_test_wrong_dimensions(self):
-        """Test that signflit_test requires 2D input"""
+    def test_signflip_test_wrong_dimensions(self):
+        """Test that signflip_test requires 2D input"""
         # 1D should fail
         with self.assertRaises(ValueError):
-            tdlm.signflit_test(np.random.randn(20), n_perms=10)
+            tdlm.signflip_test(np.random.randn(20), n_perms=10)
 
         # 3D should fail
         with self.assertRaises(ValueError):
-            tdlm.signflit_test(np.random.randn(20, 10, 5), n_perms=10)
+            tdlm.signflip_test(np.random.randn(20, 10, 5), n_perms=10)
 
-    def test_signflit_test_single_subject(self):
-        """Test that signflit_test requires multiple observations"""
+    def test_signflip_test_single_subject(self):
+        """Test that signflip_test requires multiple observations"""
         # Single subject should fail (n=1)
         sx_single = np.random.randn(1, 10)
-        with self.assertRaises(AssertionError):
-            tdlm.signflit_test(sx_single, n_perms=10)
+        with self.assertRaises(ValueError):
+            tdlm.signflip_test(sx_single, n_perms=10)
 
-    def test_signflit_test_minimum_subjects(self):
-        """Test signflit_test with minimum valid subjects (n=2)"""
+    def test_signflip_test_minimum_subjects(self):
+        """Test signflip_test with minimum valid subjects (n=2)"""
         sx_two = np.random.randn(2, 10)
-        result = tdlm.signflit_test(sx_two, n_perms=10)
+        result = tdlm.signflip_test(sx_two, n_perms=10)
 
         # Should produce valid output
         self.assertGreater(result.pvalue, 0)
         self.assertLessEqual(result.pvalue, 1)
         self.assertEqual(len(result.t_perms), 10)
 
-    def test_signflit_test_with_nans(self):
-        """Test signflit_test handles NaN values in first column"""
+    def test_signflip_test_with_nans(self):
+        """Test signflip_test handles NaN values in first column"""
         # First column all NaN should be handled (removed)
         sx_with_nan = np.random.randn(20, 10)
         sx_with_nan[:, 0] = np.nan
 
-        result = tdlm.signflit_test(sx_with_nan, n_perms=10)
+        result = tdlm.signflip_test(sx_with_nan, n_perms=10)
         self.assertGreater(result.pvalue, 0)
         self.assertLessEqual(result.pvalue, 1)
 
@@ -184,7 +193,7 @@ class TestInputValidation(unittest.TestCase):
         X = np.array([1])
 
         # Single element should fail (len(X) > 1 required)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             unique_permutations(X, k=1)
 
     def test_unique_permutations_two_elements(self):
@@ -202,7 +211,7 @@ class TestInputValidation(unittest.TestCase):
         X_2d = np.array([[1, 2], [3, 4]])
 
         # Should fail assertion for ndim==1
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             unique_permutations(X_2d, k=2)
 
     # ==================== simulate_meeg tests ====================
@@ -210,13 +219,13 @@ class TestInputValidation(unittest.TestCase):
     def test_simulate_meeg_invalid_autocorr(self):
         """Test that simulate_meeg validates autocorr parameter"""
         # autocorr must be in [0, 1)
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             simulate_meeg(length=1, sfreq=100, autocorr=-0.1)
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             simulate_meeg(length=1, sfreq=100, autocorr=1.0)
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             simulate_meeg(length=1, sfreq=100, autocorr=1.5)
 
     def test_simulate_meeg_valid_autocorr_boundary(self):
@@ -337,7 +346,7 @@ class TestInputValidation(unittest.TestCase):
         insert_data = np.random.randn(6, 20)  # Wrong n_channels
         insert_labels = np.array([0, 0, 1, 1, 2, 2])
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             insert_events(data, insert_data, insert_labels,
                          n_events=2, lag=5, sequence=[0, 1, 2])
 
@@ -347,7 +356,7 @@ class TestInputValidation(unittest.TestCase):
         insert_data = np.random.randn(6, 10)
         insert_labels = np.array([0, 1, 2])  # Too short
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             insert_events(data, insert_data, insert_labels,
                          n_events=2, lag=5, sequence=[0, 1, 2])
 
@@ -363,6 +372,32 @@ class TestInputValidation(unittest.TestCase):
                          n_events=2, lag=5, sequence=[0, 1, 2],
                          distribution='invalid')
 
+    def test_insert_events_missing_sequence_and_transitions(self):
+        """Test that sequence or transitions must be provided"""
+        data = np.random.randn(1000, 10)
+        insert_data = np.random.randn(6, 10)
+        insert_labels = np.array([0, 0, 1, 1, 2, 2])
+
+        with self.assertRaises(ValueError):
+            insert_events(data, insert_data, insert_labels, n_events=2, lag=5)
+
+    def test_insert_events_with_1d_transitions(self):
+        """Test that 1D transitions are expanded to transition windows"""
+        data = np.random.randn(1000, 10)
+        insert_data = np.random.randn(6, 10)
+        insert_labels = np.array([0, 0, 1, 1, 2, 2])
+
+        result = insert_events(
+            data,
+            insert_data,
+            insert_labels,
+            n_events=2,
+            lag=5,
+            n_steps=1,
+            transitions=[0, 1, 2],
+        )
+        self.assertEqual(result.shape, data.shape)
+
     def test_insert_events_distribution_not_normalized(self):
         """Test that insert_events validates distribution sum"""
         data = np.random.randn(1000, 10)
@@ -372,7 +407,7 @@ class TestInputValidation(unittest.TestCase):
         # Distribution that doesn't sum to 1
         invalid_dist = np.ones(1000) * 0.5  # sums to 500
 
-        with self.assertRaises(AssertionError):
+        with self.assertRaises(ValueError):
             insert_events(data, insert_data, insert_labels,
                          n_events=2, lag=5, sequence=[0, 1, 2],
                          distribution=invalid_dist)

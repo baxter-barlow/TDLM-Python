@@ -3,6 +3,7 @@ jax
 joblib
 mat73
 matplotlib
+mypy
 mne
 numba
 numpy
