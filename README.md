@@ -22,7 +22,7 @@ import tdlm
 
 # first you need a prediction matrix that contains decoded probabilities
 # of individual events over time. The matrix must be shape
-# (n_states, n_timesteps), e.g. (3, 1000), where each row contains the
+# (n_timepoints, n_states), e.g. (1000, 3), where each column contains the
 # probabilities of that state's reactivation over time.
 
 proba = ... # get your probability matrix somewhere
@@ -39,7 +39,7 @@ tf = [[0, 1, 0], [ 0, 0, 1], [1, 0 , 0]]  # transition matrix
 # next, input these two variables into the algorithm to calculate
 # the sequenceness, i.e. if the probability time series
 # show a dependence across time at a specific time lag
-sequenceness_fwd, sequenceness_bkw, * = tdlm.compute_1step(proba, tf)
+sequenceness_fwd, sequenceness_bkw = tdlm.compute_1step(proba, tf)
 
 # results are a matrix of size (n_shuffles, max_lag)
 # where entry [0, :] contains the baseline sequenceness
@@ -65,24 +65,94 @@ tdlm.compute_1step(proba, tf)
 
 # 2-step TDLM, e.g. looking for transitions (A->B)->C, (B->C)->D, ...
 tdlm.compute_2step(proba, tf)
+
+# Windowed TDLM over local time windows
+win = tdlm.compute_windowed(
+    proba,
+    tf,
+    win_size=200,
+    step_size=50,
+    seq_type='glm',   # 'glm' | 'crosscorr' | '2step'
+)
+
+# Trial-specific transitions (one TF per trial), with fixed output shape:
+# (n_trials, n_shuf, max_lag + 1)
+sf_trials, sb_trials = tdlm.compute_1step_per_trial(
+    probas_trials,    # shape (n_trials, n_timepoints, n_states)
+    tf_trials,        # list/array of per-trial TF matrices
+)
 ```
+
+## EEG simulation helpers
+
+Issue-oriented helper names are available:
+
+```python
+# Resting-state EEG simulation
+eeg_rest = tdlm.simulate_eeg_resting_state(length=60, sfreq=100, n_channels=64)
+
+# Localizer/classifier simulation
+train_x, train_y, patterns = tdlm.simulate_eeg_localizer(
+    n_patterns=8,
+    n_channels=64,
+    n_train_per_stim=20,
+)
+```
+
+## Quality Validation
+
+The repository now includes three quality gates:
+
+1. MATLAB fixture parity tests (always in standard test runs)
+2. Statistical validity tests (`statistical_slow`, nightly-gated)
+3. Performance regression harness (`report` on PRs, `enforce` nightly)
+
+Pytest markers:
+
+* `statistical_slow`
+* `integration_slow`
+* `matlab_engine_optional`
+* `perf`
+
+Environment toggles:
+
+* `TDLM_RUN_STATISTICAL_SLOW=1`
+* `TDLM_ENABLE_MATLAB_ENGINE_TESTS=1`
+* `TDLM_PERF_THRESHOLD` (defaults to `0.20`)
+
+Performance harness commands:
+
+```bash
+python tdlm/tests/benchmarks/run_perf_regression.py --mode calibrate --baseline tdlm/tests/benchmarks/baseline_ubuntu_py310.json
+python tdlm/tests/benchmarks/run_perf_regression.py --mode report --baseline tdlm/tests/benchmarks/baseline_ubuntu_py310.json --threshold 0.20
+python tdlm/tests/benchmarks/run_perf_regression.py --mode enforce --baseline tdlm/tests/benchmarks/baseline_ubuntu_py310.json --threshold 0.20
+```
+
+## Migration notes
+
+- Runtime input validation now raises explicit `ValueError`/`TypeError` instead of relying on `assert`.
+- `tdlm.signflit_test` remains available as a compatibility alias but now emits `DeprecationWarning`; use `tdlm.signflip_test`.
+- `compute_windowed` and `compute_1step_per_trial` return fixed numeric arrays and no longer fall back to ambiguous object arrays.
+- Cross-correlation entrypoints now accept `rng` for deterministic shuffles:
+  - `tdlm.sequenceness_crosscorr(..., rng=42)`
+  - `tdlm.cross_correlation(..., rng=42)`
 
 ## Signflip permutation test
 
-To get the classical state-permutation test as in Liu et al (2021), simply use the `compute_1step.(... n_shuf=X)`.
+To get the classical state-permutation test as in Liu et al (2021), simply use `compute_1step(..., n_shuf=X)`.
 
 
-However, the more robust and less conservative sign-flip permutation test is also available, set `n_shufs=0` and use
+However, the more robust and less conservative sign-flip permutation test is also available, set `n_shuf=0` and use
 
 ```python
-sf, sb = compute_1step(...)
-p_fwd, t_fwd, t_perms = signflip_test(sf, n_perms=10000)
+sf, sb = tdlm.compute_1step(...)
+p_fwd, t_fwd, t_perms = tdlm.signflip_test(sf, n_perms=10000)
 ```
 
 to plot your results, use this function
 
 ```
-plot_tval_distribution(t_fwd, t_perms)
+tdlm.plot_tval_distribution(t_fwd, t_perms)
 ```
 
 ## ToDos / Contribute

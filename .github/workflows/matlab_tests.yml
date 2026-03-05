@@ -1,14 +1,10 @@
-name: MATLAB tests
+name: MATLAB optional engine tests
 
-#on:
-#  push:
-#    branches: [ master ]
-#  pull_request:
-#    branches: [ master ]
+on:
+  workflow_dispatch:
 
 jobs:
-  run-matlab-tests:
-
+  run-matlab-optional-tests:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -40,8 +36,28 @@ jobs:
         pip install -r requirements-matlab.txt
         pip install -e .
 
-    - name: Rename MATLAB test file
-      run: mv tdlm/tests/xtest_matlab_compatibility.py tdlm/tests/test_matlab_compatibility.py
+    - name: Check MATLAB engine availability
+      id: enginecheck
+      run: |
+        python - <<'PY'
+        import importlib.util
+        import os
 
-    - name: Run MATLAB tests with pytest
-      run: pytest -s -vv tdlm/tests/test_matlab_compatibility.py
+        available = (
+            importlib.util.find_spec("matlab") is not None
+            and importlib.util.find_spec("matlab.engine") is not None
+        )
+        print(f"MATLAB engine available: {available}")
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write(f"available={'true' if available else 'false'}\\n")
+        PY
+
+    - name: Run optional MATLAB engine tests
+      if: steps.enginecheck.outputs.available == 'true'
+      env:
+        TDLM_ENABLE_MATLAB_ENGINE_TESTS: '1'
+      run: pytest -q -m "matlab_engine_optional"
+
+    - name: Skip notice
+      if: steps.enginecheck.outputs.available != 'true'
+      run: echo "MATLAB engine unavailable, skipping optional engine parity tests."
